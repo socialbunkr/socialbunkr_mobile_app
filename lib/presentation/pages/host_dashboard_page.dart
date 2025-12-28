@@ -13,6 +13,11 @@ import 'package:socialbunkr_mobile_app/screens/tenant_management/rating_review_s
 import 'package:socialbunkr_mobile_app/screens/tenant_management/rent_payment_screen.dart';
 import 'package:socialbunkr_mobile_app/screens/tenant_management/tickets_screen.dart';
 import 'package:socialbunkr_mobile_app/screens/update_property_details_screen.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_file/open_file.dart';
+import 'dart:html' as html;
+
 
 
 // 🎨 BRAND COLORS & STYLES
@@ -45,31 +50,37 @@ class Booking {
   final String id;
   final String booking_id;
   final String guestName;
+  final String guestPhoneNumber;
   final String checkIn;
   final String checkOut;
   final String totalPrice;
-  final String status; // e.g., Upcoming, Ongoing, Completed, Cancelled
+  final String status;
+  final String payoutStatus;
 
   Booking({
     required this.id,
     required this.booking_id,
     required this.guestName,
+    required this.guestPhoneNumber,
     required this.checkIn,
     required this.checkOut,
     required this.totalPrice,
     required this.status,
+    required this.payoutStatus,
   });
 
   factory Booking.fromJson(Map<String, dynamic> json) {
-    print('Booking.fromJson: status: ${json['status']}');
     return Booking(
       id: json['id'].toString(),
       booking_id: json['booking_id'].toString(),
       guestName: json['guest_name'] ?? 'N/A',
+      guestPhoneNumber: json['guest_phone_number'] ?? 'N/A',
       checkIn: json['checkin'] ?? 'N/A',
       checkOut: json['checkout'] ?? 'N/A',
-      totalPrice: '₹${double.tryParse(json['total_price']?.toString() ?? '')?.toStringAsFixed(0) ?? '0'}',
+      totalPrice:
+          '₹${double.tryParse(json['total_price']?.toString() ?? '')?.toStringAsFixed(0) ?? '0'}',
       status: json['status'] ?? 'N/A',
+      payoutStatus: json['payout_status'] ?? 'N/A',
     );
   }
 }
@@ -245,10 +256,12 @@ class _HostDashboardBodyState extends State<HostDashboardBody> {
           id: booking.id,
           booking_id: booking.booking_id,
           guestName: booking.guestName,
+          guestPhoneNumber: booking.guestPhoneNumber,
           checkIn: booking.checkIn,
           checkOut: booking.checkOut,
           totalPrice: booking.totalPrice,
           status: 'Ongoing',
+          payoutStatus: booking.payoutStatus,
         );
         _ongoingBookings.add(updatedBooking);
       }
@@ -264,10 +277,12 @@ class _HostDashboardBodyState extends State<HostDashboardBody> {
           id: booking.id,
           booking_id: booking.booking_id,
           guestName: booking.guestName,
+          guestPhoneNumber: booking.guestPhoneNumber,
           checkIn: booking.checkIn,
           checkOut: booking.checkOut,
           totalPrice: booking.totalPrice,
           status: 'Completed',
+          payoutStatus: booking.payoutStatus,
         );
         _completedBookings.add(updatedBooking);
       }
@@ -528,6 +543,7 @@ class BookingList extends StatelessWidget {
             booking: booking,
             onCheckIn: () => _showCheckInDialog(context, booking, onCheckInSuccess),
             onCheckOutSuccess: onCheckOutSuccess,
+            onCardClick: () => _showBookingDetailsDialog(context, booking),
           );
         },
       ),
@@ -539,99 +555,104 @@ class BookingCard extends StatelessWidget {
   final Booking booking;
   final VoidCallback onCheckIn;
   final Function(String) onCheckOutSuccess;
+  final VoidCallback onCardClick;
 
   const BookingCard({
     super.key,
     required this.booking,
     required this.onCheckIn,
     required this.onCheckOutSuccess,
+    required this.onCardClick,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: backgroundWhite,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: const [cardShadow],
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.bed_outlined, color: primaryDarkGreen, size: 28),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  booking.guestName,
-                  style: const TextStyle(
+    return GestureDetector(
+      onTap: onCardClick,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: backgroundWhite,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [cardShadow],
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.bed_outlined, color: primaryDarkGreen, size: 28),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    booking.guestName,
+                    style: const TextStyle(
+                      fontFamily: fontName,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: primaryDarkGreen,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _buildDateColumn("Check-in", booking.checkIn),
+                      Container(
+                        height: 30,
+                        width: 1,
+                        color: dividerGray,
+                        margin: const EdgeInsets.symmetric(horizontal: 12),
+                      ),
+                      _buildDateColumn("Check-out", booking.checkOut),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            if (booking.status.toLowerCase() == 'upcoming')
+              ElevatedButton(
+                onPressed: onCheckIn,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accentGold,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                ),
+                child: const Text(
+                  "CHECK-IN",
+                  style: TextStyle(
                     fontFamily: fontName,
                     fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: primaryDarkGreen,
+                    fontSize: 13,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _buildDateColumn("Check-in", booking.checkIn),
-                    Container(
-                      height: 30,
-                      width: 1,
-                      color: dividerGray,
-                      margin: const EdgeInsets.symmetric(horizontal: 12),
-                    ),
-                    _buildDateColumn("Check-out", booking.checkOut),
-                  ],
+              )
+            else if (booking.status.toLowerCase() == 'ongoing')
+              ElevatedButton(
+                onPressed: () => _showCheckOutDialog(context, booking, onCheckOutSuccess),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          if (booking.status.toLowerCase() == 'upcoming')
-            ElevatedButton(
-              onPressed: onCheckIn,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: accentGold,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              ),
-              child: const Text(
-                "CHECK-IN",
-                style: TextStyle(
-                  fontFamily: fontName,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
+                child: const Text(
+                  "CHECK-OUT",
+                  style: TextStyle(
+                    fontFamily: fontName,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
               ),
-            )
-          else if (booking.status.toLowerCase() == 'ongoing')
-            ElevatedButton(
-              onPressed: () => _showCheckOutDialog(context, booking, onCheckOutSuccess),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              ),
-              child: const Text(
-                "CHECK-OUT",
-                style: TextStyle(
-                  fontFamily: fontName,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -659,6 +680,90 @@ class BookingCard extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+void _showBookingDetailsDialog(BuildContext context, Booking booking) {
+  showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('Booking Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Guest Name: ${booking.guestName}'),
+              Text('Guest Phone: ${booking.guestPhoneNumber}'),
+              Text('Check-in: ${booking.checkIn}'),
+              Text('Check-out: ${booking.checkOut}'),
+              Text('Total Price: ${booking.totalPrice}'),
+              Text('Status: ${booking.status}'),
+              if (booking.status.toLowerCase() == 'completed') ...[
+                Text('Payout Status: ${booking.payoutStatus}'),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => _downloadInvoice(context, booking.booking_id),
+                  child: const Text('Download Invoice'),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+void _downloadInvoice(BuildContext context, String bookingId) async {
+  try {
+    final String? apiBaseUrl = kIsWeb ? dotenv.env['API_BASE_URL_WEB']! : dotenv.env['API_BASE_URL_ANDROID']!;
+    final _secureStorage = FlutterSecureStorage();
+    final token = await _secureStorage.read(key: 'token');
+
+    if (apiBaseUrl == null) {
+      throw Exception('API_BASE_URL is not defined in .env');
+    }
+
+    final response = await http.get(
+      Uri.parse('$apiBaseUrl/api/payments/orders/$bookingId/invoice/'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Token $token',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      if (kIsWeb) {
+        final blob = html.Blob([response.bodyBytes]);
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        html.AnchorElement(href: url)
+          ..setAttribute("download", "invoice-$bookingId.html")
+          ..click();
+        html.Url.revokeObjectUrl(url);
+      } else {
+        final directory = await getTemporaryDirectory();
+        final filePath = '${directory.path}/invoice-$bookingId.html';
+        final file = File(filePath);
+        await file.writeAsBytes(response.bodyBytes);
+        OpenFile.open(filePath);
+      }
+    } else {
+      final error = json.decode(response.body)['error'];
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to download invoice: $error')),
+      );
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('An error occurred: $e')),
     );
   }
 }
